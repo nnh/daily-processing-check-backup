@@ -114,7 +114,12 @@ function getOutputRangesNas_(outputSheet, log, outputRow){
   if (errorAndWarning.length > 0){
     const outputBikou = errorAndWarning.join('\n');
     const bikouCol = getColIdx_(outputSheet, 2, '備考');
-    const temp = outputSheet.getRange(outputRow + 1, bikouCol + 1).getValue();
+    const saveBikouValue = outputSheet.getRange(outputRow, bikouCol + 1).getValue();
+    let temp = saveBikouValue;
+    // Remove duplicate values.
+    temp = errorAndWarning.reduce((totalValue, currentValue) => totalValue.replace(currentValue, ''), saveBikouValue);
+    // Remove consecutive line breaks
+    temp = temp.replace(/(?<=\n)\n/g, '');
     const outputBikouString = temp.length > 0 ? temp + '\n' + outputBikou : outputBikou;
     outputSheet.getRange(outputRow, bikouCol + 1).setValue(outputBikouString);
   }
