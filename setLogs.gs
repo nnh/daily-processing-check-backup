@@ -132,16 +132,17 @@ function getOutputRangesNas_(outputSheet, log, outputRow){
     const outputTargetColNum = getColIdx_(outputSheet, 1, startEnd[jobNameIdx]) + 1;
     // Jobs starting before 24:00 will be output on the next date.
     const outputTargetRow = initVar.nasYesterdayStartJobNameList.indexOf(startEnd[jobNameIdx]) > -1 ? outputRow + 1 : outputRow;
-    if (startEnd[startIdx].length > 0){
-      outputSheet.getRange(outputTargetRow, outputTargetColNum + 1).setValue(startEnd[startIdx]);
+    if (outputSheet.getRange(outputTargetRow, outputTargetColNum).getValue().length == 0){
+      if (startEnd[startIdx].length > 0){
+        outputSheet.getRange(outputTargetRow, outputTargetColNum + 1).setValue(startEnd[startIdx]);
+      }
+      if (startEnd[endIdx].length > 0){
+        outputSheet.getRange(outputTargetRow, outputTargetColNum + 2).setValue(startEnd[endIdx]);
+      }
+      if (startEnd[startIdx].length > 0 && startEnd[endIdx].length > 0){
+        outputSheet.getRange(outputTargetRow, outputTargetColNum).setValue('完了');
+      }
     }
-    if (startEnd[endIdx].length > 0){
-      outputSheet.getRange(outputTargetRow, outputTargetColNum + 2).setValue(startEnd[endIdx]);
-    }
-    if (startEnd[startIdx].length > 0 && startEnd[endIdx].length > 0){
-      outputSheet.getRange(outputTargetRow, outputTargetColNum).setValue('完了');
-    }
-
   });  
   // Warnings and Errors are output to the remarks of today's date.
   const errorAndWarning = log.filter(x => warningString.test(x)|| errorString.test(x));
@@ -154,6 +155,7 @@ function getOutputRangesNas_(outputSheet, log, outputRow){
     temp = errorAndWarning.reduce((totalValue, currentValue) => totalValue.replace(currentValue, ''), saveBikouValue);
     // Remove consecutive line breaks
     temp = temp.replace(/(?<=\n)\n/g, '');
+    temp = temp.replace(/^\n+/g, '');
     const outputBikouString = temp.length > 0 ? temp + '\n' + outputBikou : outputBikou;
     outputSheet.getRange(outputRow, bikouCol + 1).setValue(outputBikouString);
   }
