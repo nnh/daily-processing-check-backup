@@ -190,8 +190,14 @@ function getTargetDateIdx_(sheet, rowColIdx, rowString){
  */
 function nasInit_(){
   let initVar = {};
-  initVar.nasYesterdayStartJobNameList = ['ARO_backup', 'backupToPotato_Archives', 'backupToPotato_Projects', 'backupToPotato_References'];
-  initVar.nasTodayStartJobNameList = ['box_Backup_Datacenter', 'box_Backup_Projects', 'box_Backup_Restricted', 'box_Backup_Shared', 'box_Backup_Stat', 'box_Backup_Trials'];
+  const jobnameSs = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('wk_nas_jobname');
+  const bodyStartRow = 2;
+  const yesterdayCol = 1;
+  const todayCol = 2;
+  const nasYesterdayStartJobNameList = jobnameSs.getRange(bodyStartRow, yesterdayCol, jobnameSs.getLastRow(), 1).getValues().flat().filter(x => x.length > 0);
+  const nasTodayStartJobNameList = jobnameSs.getRange(bodyStartRow, todayCol, jobnameSs.getLastRow(), 1).getValues().flat().filter(x => x.length > 0);
+  initVar.nasYesterdayStartJobNameList = nasYesterdayStartJobNameList;
+  initVar.nasTodayStartJobNameList = nasTodayStartJobNameList;
   initVar.nasJobNameList = initVar.nasTodayStartJobNameList.concat(initVar.nasYesterdayStartJobNameList);
   return initVar;
 }
