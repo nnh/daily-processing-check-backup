@@ -1,9 +1,43 @@
 function onOpen(){
-  SpreadsheetApp.getActiveSpreadsheet().addMenu('NASログ出力', [{name:'NASログ出力', functionName:'setAronasLogs'}]);
+  SpreadsheetApp.getActiveSpreadsheet().addMenu('ログ出力', [{name:'NAS', functionName:'setAronasLogs'}, {name:'AWS', functionName:'setAwsLog'}]);
+}
+function setAwsLog(){
+  const inputSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('wk_aws');
+  const inputValues = inputSheet.getDataRange().getValues();
+  // Only items dated today are eligible.
+  const today = new Date();
+  const todayYYYYMMDD = Utilities.formatDate(today, 'Asia/Tokyo', 'yyyyMMdd');
+  // date, time, size, unit, dump name
+  const valueTableSplitBySpace = inputValues.map(x => x[0].split(/\s+/));
+  const targetValues = valueTableSplitBySpace.filter(x => new RegExp(todayYYYYMMDD).test(x));
+  if (targetValues.length == 0){
+    return;
+  }
+  const dumpNameIdx = 4;
+  const sizeIdx = 2;
+  const serverNameIdx = valueTableSplitBySpace[0].length;
+  const removeFileNameFoot = new RegExp('[\/|_]' + todayYYYYMMDD + '.dump');
+  const valueTableSplitDumpName = valueTableSplitBySpace.map(x => x.concat(x[dumpNameIdx].replace(removeFileNameFoot, '')));
+  const outputSheet = getOutputSheet_();
+  const outputRow = getTargetDateIdx_(outputSheet, 0, today) + 1;
+  const colIdxIdx = valueTableSplitDumpName[0].length; 
+  const outputValues = valueTableSplitDumpName.map(x => x.concat(getColIdx_(outputSheet, 1, x[serverNameIdx])));
+  const checkOutputCol = outputValues.map(x => !x[colIdxIdx] ? x : null).filter(x => x);
+  if (checkOutputCol.length > 0){
+    const targetServerName = checkOutputCol.map(x => x[serverNameIdx]).join(',');
+    Browser.msgBox(targetServerName + 'の出力列を追加して再実行してください');
+    return;
+  }
+  outputValues.forEach(x => {
+    outputSheet.getRange(outputRow, x[colIdxIdx] + 1).setValue(x[sizeIdx]);
+  }); 
 }
 function setAronasLogs(){
-  const outputSheet = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
+  const outputSheet = getOutputSheet_();
   getNasInfo_(outputSheet);
+}
+function getOutputSheet_(){
+  return SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
 }
 /**
  * Obtain the date to be processed.
@@ -74,7 +108,7 @@ function getNasInfo_(outputSheet){
  * @return none.
  */
 function getOutputRangesNas_(outputSheet, log, outputRow){
-  const initVar = init_();
+  const initVar = nasInit_();
   const warningString = new RegExp('^Warning');
   const errorString = new RegExp('^Error');
   const hbs = new RegExp('Hybrid Backup Sync');
@@ -98,23 +132,30 @@ function getOutputRangesNas_(outputSheet, log, outputRow){
     const outputTargetColNum = getColIdx_(outputSheet, 1, startEnd[jobNameIdx]) + 1;
     // Jobs starting before 24:00 will be output on the next date.
     const outputTargetRow = initVar.nasYesterdayStartJobNameList.indexOf(startEnd[jobNameIdx]) > -1 ? outputRow + 1 : outputRow;
-    if (startEnd[startIdx].length > 0){
-      outputSheet.getRange(outputTargetRow, outputTargetColNum + 1).setValue(startEnd[startIdx]);
+    if (outputSheet.getRange(outputTargetRow, outputTargetColNum).getValue().length == 0){
+      if (startEnd[startIdx].length > 0){
+        outputSheet.getRange(outputTargetRow, outputTargetColNum + 1).setValue(startEnd[startIdx]);
+      }
+      if (startEnd[endIdx].length > 0){
+        outputSheet.getRange(outputTargetRow, outputTargetColNum + 2).setValue(startEnd[endIdx]);
+      }
+      if (startEnd[startIdx].length > 0 && startEnd[endIdx].length > 0){
+        outputSheet.getRange(outputTargetRow, outputTargetColNum).setValue('完了');
+      }
     }
-    if (startEnd[endIdx].length > 0){
-      outputSheet.getRange(outputTargetRow, outputTargetColNum + 2).setValue(startEnd[endIdx]);
-    }
-    if (startEnd[startIdx].length > 0 && startEnd[endIdx].length > 0){
-      outputSheet.getRange(outputTargetRow, outputTargetColNum).setValue('完了');
-    }
-
   });  
   // Warnings and Errors are output to the remarks of today's date.
   const errorAndWarning = log.filter(x => warningString.test(x)|| errorString.test(x));
   if (errorAndWarning.length > 0){
     const outputBikou = errorAndWarning.join('\n');
     const bikouCol = getColIdx_(outputSheet, 2, '備考');
-    const temp = outputSheet.getRange(outputRow + 1, bikouCol + 1).getValue();
+    const saveBikouValue = outputSheet.getRange(outputRow, bikouCol + 1).getValue();
+    let temp = saveBikouValue;
+    // Remove duplicate values.
+    temp = errorAndWarning.reduce((totalValue, currentValue) => totalValue.replace(currentValue, ''), saveBikouValue);
+    // Remove consecutive line breaks
+    temp = temp.replace(/(?<=\n)\n/g, '');
+    temp = temp.replace(/^\n+/g, '');
     const outputBikouString = temp.length > 0 ? temp + '\n' + outputBikou : outputBikou;
     outputSheet.getRange(outputRow, bikouCol + 1).setValue(outputBikouString);
   }
@@ -147,10 +188,16 @@ function getTargetDateIdx_(sheet, rowColIdx, rowString){
  * @param none.
  * @return {Object} Data commonly needed for each process.
  */
-function init_(){
+function nasInit_(){
   let initVar = {};
-  initVar.nasYesterdayStartJobNameList = ['ARO_backup', 'backupToPotato_Archives', 'backupToPotato_Projects', 'backupToPotato_References'];
-  initVar.nasTodayStartJobNameList = ['box_Backup_Datacenter', 'box_Backup_Projects', 'box_Backup_Restricted', 'box_Backup_Shared', 'box_Backup_Stat', 'box_Backup_Trials'];
+  const jobnameSs = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('wk_nas_jobname');
+  const bodyStartRow = 2;
+  const yesterdayCol = 1;
+  const todayCol = 2;
+  const nasYesterdayStartJobNameList = jobnameSs.getRange(bodyStartRow, yesterdayCol, jobnameSs.getLastRow(), 1).getValues().flat().filter(x => x.length > 0);
+  const nasTodayStartJobNameList = jobnameSs.getRange(bodyStartRow, todayCol, jobnameSs.getLastRow(), 1).getValues().flat().filter(x => x.length > 0);
+  initVar.nasYesterdayStartJobNameList = nasYesterdayStartJobNameList;
+  initVar.nasTodayStartJobNameList = nasTodayStartJobNameList;
   initVar.nasJobNameList = initVar.nasTodayStartJobNameList.concat(initVar.nasYesterdayStartJobNameList);
   return initVar;
 }
