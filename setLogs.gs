@@ -90,7 +90,9 @@ function getNasInfo_(outputSheet){
   // Obtain the line numbers to be output from the date and store them in an array.
   const outputRowIdx = targetDate.map(x => getTargetDateIdx_(outputSheet, 0, x));
   const targetDateString = targetDate.map(x => Utilities.formatDate(x, 'Asia/Tokyo', 'yyyy-MM-dd'));
-  const nasLog = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('wk_nas').getDataRange().getValues();
+  const nasLogSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('wk_nas');
+  const nasLogLastRow = nasLogSheet.getLastRow();
+  const nasLog = nasLogSheet.getRange(1, 1, nasLogLastRow, 1).getValues();
   // Extract logs for dates to be processed.
   const target = targetDateString.map(x => nasLog.filter(log => new RegExp(x).test(log)));
   outputRowIdx.forEach((x, idx) => {
