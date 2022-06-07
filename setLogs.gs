@@ -22,15 +22,43 @@ function setAwsLog(){
   const outputRow = getTargetDateIdx_(outputSheet, 0, today) + 1;
   const colIdxIdx = valueTableSplitDumpName[0].length; 
   const outputValues = valueTableSplitDumpName.map(x => x.concat(getColIdx_(outputSheet, 1, x[serverNameIdx])));
-  const checkOutputCol = outputValues.map(x => !x[colIdxIdx] ? x : null).filter(x => x);
-  if (checkOutputCol.length > 0){
-    const targetServerName = checkOutputCol.map(x => x[serverNameIdx]).join(',');
-    Browser.msgBox(targetServerName + 'の出力列を追加して再実行してください');
+  const serverExistenceCheckBackupString = outputValues.map(x => x[serverNameIdx]).flat();
+  const serverExistenceCheckBackupOutputSheet = getOutputSheetAwsServerNames_(outputSheet);
+  const check1 = serverExistenceCheckBackupString.filter(x => !serverExistenceCheckBackupOutputSheet.includes(x));
+  if (check1.length > 0){
+    outputMsg_(check1, 'の出力列を追加して再実行してください');
+    return;
+  }
+  const check2 = serverExistenceCheckBackupOutputSheet.filter(x => !serverExistenceCheckBackupString.includes(x));
+  if (check2.length > 0){
+    outputMsg_(check2, 'のバックアップを確認して再実行してください');
     return;
   }
   outputValues.forEach(x => {
     outputSheet.getRange(outputRow, x[colIdxIdx] + 1).setValue(x[sizeIdx]);
   }); 
+}
+/**
+ * Output of pop-up messages.
+ * @param <Array.String>
+ * @param <String>
+ * @return none.
+ */
+function outputMsg_(target, msg){
+  const messageString = target.length == 1 ? target : target.join(', ');
+  Browser.msgBox(messageString + msg);
+}
+function getOutputSheetAwsServerNames_(outputSheet){
+  // Exclude stopped backups
+  const excludeServerNames = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('wk_closed_servers').getRange('A:A').getValues().filter(x => x != '').flat();
+  const awsColStart = getColIdx_(outputSheet, 0, 'AWS') + 1;
+  const colCount = outputSheet.getLastColumn() - awsColStart;
+  const targetStrings = outputSheet.getRange(1, awsColStart + 1, 1, colCount).getValues()[0];
+  const colCheck = targetStrings.map((x, idx) => x != '' ? idx: null).filter(x => x);
+  const awsColEnd = colCheck.length == 0 ? outputSheet.getLastColumn() : awsColStart + colCheck[0] + 1;
+  const serverNames = outputSheet.getRange(2, awsColStart, 1, awsColEnd - awsColStart).getValues()[0].filter(x => x != '');
+  const resServerNames = excludeServerNames.length > 0 ? serverNames.filter(x => !excludeServerNames.includes(x)) : serverNames;
+  return resServerNames;
 }
 function setAronasLogs(){
   const outputSheet = getOutputSheet_();
