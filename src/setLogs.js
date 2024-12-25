@@ -47,6 +47,9 @@ function setAwsLog() {
   const check2 = check2Aws_(serverExistenceCheckBackupOutputSheet, serverExistenceCheckBackupString, outputSheet);
   const outputValueAndCol = check2 !== null ? [...getAwsOutputValues_(outputValueArray), ...check2.values()] : getAwsOutputValues_(outputValueArray);
   outputValueAndCol.forEach(([outputValue, colIdx]) => outputSheet.getRange(outputRow, colIdx + 1).setValue(outputValue));
+  if (check2 === null) {
+    return;
+  }
   if (check2.size > 0) {
     const target = Array.from(check2.keys());
     outputMsg_(target, 'のバックアップを確認してください');
