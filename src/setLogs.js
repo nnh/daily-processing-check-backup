@@ -1,3 +1,5 @@
+const awsSizeIdx = 2;
+
 function onOpen() {
   SpreadsheetApp.getActiveSpreadsheet().addMenu('ログ出力', [
     { name: 'NAS', functionName: 'setAronasLogs' },
@@ -20,7 +22,6 @@ function setAwsLog() {
     return;
   }
   const dumpNameIdx = 4;
-  const sizeIdx = 2;
   const serverNameIdx = valueTableSplitBySpace[0].length;
   const removeFileNameFoot = new RegExp('[/|_]' + todayYYYYMMDD + '.dump');
   const valueTableSplitDumpName = valueTableSplitBySpace.map(x =>
@@ -28,11 +29,10 @@ function setAwsLog() {
   );
   const outputSheet = getOutputSheet_();
   const outputRow = getTargetDateIdx_(outputSheet, 0, today) + 1;
-  const colIdxIdx = valueTableSplitDumpName[0].length;
-  const outputValues = valueTableSplitDumpName.map(x =>
+  const outputValueArray = valueTableSplitDumpName.map(x =>
     x.concat(getColIdx_(outputSheet, 1, x[serverNameIdx]))
   );
-  const serverExistenceCheckBackupString = outputValues
+  const serverExistenceCheckBackupString = outputValueArray
     .map(x => x[serverNameIdx])
     .flat();
   const serverExistenceCheckBackupOutputSheet =
@@ -44,16 +44,37 @@ function setAwsLog() {
     outputMsg_(check1, 'の出力列を追加して再実行してください');
     return;
   }
+  const check2 = check2Aws_(serverExistenceCheckBackupOutputSheet, serverExistenceCheckBackupString, outputSheet);
+  const outputValueAndCol = check2 !== null ? [...getAwsOutputValues_(outputValueArray), ...check2.values()] : getAwsOutputValues_(outputValueArray);
+  outputValueAndCol.forEach(([outputValue, colIdx]) => outputSheet.getRange(outputRow, colIdx + 1).setValue(outputValue));
+  if (check2 === null) {
+    return;
+  }
+  if (check2.size > 0) {
+    const target = Array.from(check2.keys());
+    outputMsg_(target, 'のバックアップを確認してください');
+  }
+
+}
+function getAwsOutputValues_(values) {
+  const colIdxIdx = values[0].length - 1;
+  const result = values.map(x => [x[awsSizeIdx], x[colIdxIdx]]);
+  return result;
+}
+function check2Aws_(serverExistenceCheckBackupOutputSheet, serverExistenceCheckBackupString, outputSheet) {
+  const errorValue = ""
   const check2 = serverExistenceCheckBackupOutputSheet.filter(
     x => !serverExistenceCheckBackupString.includes(x)
   );
-  if (check2.length > 0) {
-    outputMsg_(check2, 'のバックアップを確認して再実行してください');
-    return;
+  if (check2.length === 0) {
+    return null;
   }
-  outputValues.forEach(x => {
-    outputSheet.getRange(outputRow, x[colIdxIdx] + 1).setValue(x[sizeIdx]);
+  const targetNameMapErrorValueAndColIdx = new Map();
+  check2.forEach(name => {
+    const colIdx = getColIdx_(outputSheet, 1, name);
+    targetNameMapErrorValueAndColIdx.set(name, [errorValue, colIdx]);
   });
+  return targetNameMapErrorValueAndColIdx;
 }
 /**
  * Output of pop-up messages.
