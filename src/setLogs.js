@@ -95,7 +95,7 @@ function check2Aws_(
  * @return none.
  */
 function outputMsg_(target, msg) {
-  const messageString = target.length == 1 ? target : target.join(', ');
+  const messageString = target.length === 1 ? target : target.join(', ');
   Browser.msgBox(messageString + msg);
 }
 function getOutputSheetAwsServerNames_(outputSheet) {
@@ -104,7 +104,7 @@ function getOutputSheetAwsServerNames_(outputSheet) {
     .getSheetByName('wk_closed_servers')
     .getRange('A:A')
     .getValues()
-    .filter(x => x != '')
+    .filter(x => x !== '')
     .flat();
   const awsColStart = getColIdx_(outputSheet, 0, 'AWS') + 1;
   const colCount = outputSheet.getLastColumn() - awsColStart;
@@ -112,16 +112,16 @@ function getOutputSheetAwsServerNames_(outputSheet) {
     .getRange(1, awsColStart + 1, 1, colCount)
     .getValues()[0];
   const colCheck = targetStrings
-    .map((x, idx) => (x != '' ? idx : null))
+    .map((x, idx) => (x !== '' ? idx : null))
     .filter(x => x);
   const awsColEnd =
-    colCheck.length == 0
+    colCheck.length === 0
       ? outputSheet.getLastColumn()
       : awsColStart + colCheck[0] + 1;
   const serverNames = outputSheet
     .getRange(2, awsColStart, 1, awsColEnd - awsColStart)
     .getValues()[0]
-    .filter(x => x != '');
+    .filter(x => x !== '');
   const resServerNames =
     excludeServerNames.length > 0
       ? serverNames.filter(x => !excludeServerNames.includes(x))
@@ -144,13 +144,13 @@ function getTargetDateList_() {
   const today = new Date();
   // Obtains the day of the week of the execution date.
   const todaysDay = today.getDay();
-  let yesterday = new Date(today);
+  const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
-  let targetDate = [today, yesterday];
-  if (todaysDay == 1) {
+  const targetDate = [today, yesterday];
+  if (todaysDay === 1) {
     // If the execution day is Monday, information on Friday and Saturday is obtained in addition to the previous day's information.
     for (let i = 1; i < 3; i++) {
-      let temp = new Date(yesterday);
+      const temp = new Date(yesterday);
       temp.setDate(temp.getDate() - i);
       targetDate.push(temp);
     }
@@ -163,18 +163,18 @@ function getTargetDateList_() {
       .filter(x => new Date(x[0]).getTime())
       .map(x => Utilities.formatDate(x[0], 'Asia/Tokyo', 'yyyy/MM/dd'));
     const temp = holiday.filter(
-      x => x == Utilities.formatDate(yesterday, 'Asia/Tokyo', 'yyyy/MM/dd')
+      x => x === Utilities.formatDate(yesterday, 'Asia/Tokyo', 'yyyy/MM/dd')
     );
     if (temp.length > 0) {
       // If today is Tuesday, it should be covered through last Friday. Otherwise, it covers the day before yesterday.
-      if (todaysDay == 2) {
+      if (todaysDay === 2) {
         for (let i = 1; i < 4; i++) {
-          let temp = new Date(yesterday);
+          const temp = new Date(yesterday);
           temp.setDate(temp.getDate() - i);
           targetDate.push(temp);
         }
       } else {
-        let dayBeforeYesterday = new Date(yesterday);
+        const dayBeforeYesterday = new Date(yesterday);
         dayBeforeYesterday.setDate(dayBeforeYesterday.getDate() - 1);
         targetDate.push(dayBeforeYesterday);
       }
@@ -230,7 +230,7 @@ function getOutputRangesNas_(outputSheet, log, outputRow) {
   const jobNameIdx = 2;
   const dateIdx = 3;
   const hbsStartEndTimeList = initVar.nasJobNameList.map(jobName => {
-    let startEnd = [null, null, null, null];
+    const startEnd = [null, null, null, null];
     startEnd[jobNameIdx] = jobName;
     const log = hbsInfo.filter(x => new RegExp(jobName).test(x));
     startEnd[endIdx] = log
@@ -264,7 +264,7 @@ function getOutputRangesNas_(outputSheet, log, outputRow) {
         : outputRow;
     if (
       outputSheet.getRange(outputTargetRow, outputTargetColNum).getValue()
-        .length == 0
+        .length === 0
     ) {
       if (startEnd[startIdx].length > 0) {
         outputSheet
@@ -318,7 +318,7 @@ function getColIdx_(sheet, colRowIdx, colString) {
   const target = sheet
     .getDataRange()
     .getValues()
-    [colRowIdx].map((x, idx) => (x == colString ? idx : null))
+    [colRowIdx].map((x, idx) => (x === colString ? idx : null))
     .filter(x => x);
   return target[0];
 }
@@ -355,7 +355,7 @@ function getTargetDateIdx_(sheet, rowColIdx, rowString) {
  * @return {Object} Data commonly needed for each process.
  */
 function nasInit_() {
-  let initVar = {};
+  const initVar = {};
   const jobnameSs =
     SpreadsheetApp.getActiveSpreadsheet().getSheetByName('wk_nas_jobname');
   const bodyStartRow = 2;
