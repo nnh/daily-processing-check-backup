@@ -18,7 +18,7 @@ function setAwsLog() {
   const targetValues = valueTableSplitBySpace.filter(x =>
     new RegExp(todayYYYYMMDD).test(x)
   );
-  if (targetValues.length == 0) {
+  if (targetValues.length === 0) {
     return;
   }
   const dumpNameIdx = 4;
