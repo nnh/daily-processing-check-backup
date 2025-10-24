@@ -250,6 +250,18 @@ function getOutputRangesNas_(outputSheet, log, outputRow) {
     startEnd[dateIdx] = log
       .map(x => x[0].match(/(?<=^Information,)\d{4}-\d{2}-\d{2}(?=.*Started)/g))
       .filter(x => x);
+    if (startEnd[dateIdx] === null || startEnd[dateIdx].length === 0) {
+      if (
+        jobName === 'box_Backup_Datacenter' ||
+        jobName === 'box_Backup_Trials'
+      ) {
+        startEnd[dateIdx] = log
+          .map(x =>
+            x[0].match(/(?<=^Information,)\d{4}-\d{2}-\d{2}(?=.*Finished)/g)
+          )
+          .filter(x => x);
+      }
+    }
     return startEnd;
   });
   const outputTarget = hbsStartEndTimeList.filter(x => x[dateIdx].length > 0);
@@ -280,6 +292,16 @@ function getOutputRangesNas_(outputSheet, log, outputRow) {
         outputSheet
           .getRange(outputTargetRow, outputTargetColNum)
           .setValue('完了');
+      }
+      if (
+        startEnd[jobNameIdx] === 'box_Backup_Datacenter' ||
+        startEnd[jobNameIdx] === 'box_Backup_Trials'
+      ) {
+        if (startEnd[endIdx].length > 0 && startEnd[dateIdx].length > 0) {
+          outputSheet
+            .getRange(outputTargetRow, outputTargetColNum)
+            .setValue('完了');
+        }
       }
     }
   });
