@@ -1,20 +1,107 @@
 const awsSizeIdx = 2;
+// Script property key for the Google Drive folder ID where the S3 backup list (YYYYMMDD.txt) is uploaded.
+const AWS_LOG_FOLDER_ID_KEY = 'AWS_LOG_FOLDER_ID';
+// True when run by a time-driven trigger (no UI available).
+let isTriggerRun_ = false;
 
 function onOpen() {
   SpreadsheetApp.getActiveSpreadsheet().addMenu('ログ出力', [
     { name: 'NAS', functionName: 'setAronasLogs' },
-    { name: 'AWS', functionName: 'setAwsLog' },
+    { name: 'AWS（手動貼り付け）', functionName: 'setAwsLogFromSheet' },
   ]);
 }
+/**
+ * Set a dummy value for the script property. Run once, then replace it with the actual folder ID.
+ * @param none.
+ * @return none.
+ */
+function initScriptProperties() {
+  const properties = PropertiesService.getScriptProperties();
+  if (properties.getProperty(AWS_LOG_FOLDER_ID_KEY) === null) {
+    properties.setProperty(AWS_LOG_FOLDER_ID_KEY, 'dummy');
+  }
+}
+/**
+ * Read today's S3 backup list file from Google Drive.
+ * @param {String} Today's date string (yyyyMMdd).
+ * @return {Array.String} Lines of the file. null if the file does not exist.
+ */
+function getAwsLogLines_(todayYYYYMMDD) {
+  const folderId = PropertiesService.getScriptProperties().getProperty(
+    AWS_LOG_FOLDER_ID_KEY
+  );
+  const files = DriveApp.getFolderById(folderId).getFilesByName(
+    todayYYYYMMDD + '.txt'
+  );
+  if (!files.hasNext()) {
+    return null;
+  }
+  return files
+    .next()
+    .getBlob()
+    .getDataAsString('UTF-8')
+    .split(/\r?\n/)
+    .filter(x => x !== '');
+}
+/**
+ * Read the S3 backup list from the file on Google Drive and output it.
+ * @param none.
+ * @return none.
+ */
 function setAwsLog() {
-  const inputSheet =
-    SpreadsheetApp.getActiveSpreadsheet().getSheetByName('wk_aws');
-  const inputValues = inputSheet.getDataRange().getValues();
-  // Only items dated today are eligible.
   const today = new Date();
   const todayYYYYMMDD = Utilities.formatDate(today, 'Asia/Tokyo', 'yyyyMMdd');
+  const inputLines = getAwsLogLines_(todayYYYYMMDD);
+  if (inputLines === null) {
+    outputMsg_(
+      [todayYYYYMMDD + '.txt'],
+      ' がGoogle Driveに見つかりません。wk_awsシートに貼り付けて「AWS（手動貼り付け）」を実行してください'
+    );
+    return;
+  }
+  outputAwsLog_(inputLines, today, todayYYYYMMDD);
+}
+/**
+ * Entry point for the time-driven trigger. Runs setAwsLog on weekdays only.
+ * @param none.
+ * @return none.
+ */
+function setAwsLogByTrigger() {
+  const todaysDay = new Date().getDay();
+  // Skip Saturday and Sunday.
+  if (todaysDay === 0 || todaysDay === 6) {
+    return;
+  }
+  isTriggerRun_ = true;
+  setAwsLog();
+}
+/**
+ * Read the S3 backup list pasted into the wk_aws sheet and output it (for when the automatic upload fails).
+ * @param none.
+ * @return none.
+ */
+function setAwsLogFromSheet() {
+  const inputSheet =
+    SpreadsheetApp.getActiveSpreadsheet().getSheetByName('wk_aws');
+  const inputLines = inputSheet
+    .getDataRange()
+    .getValues()
+    .map(x => x[0]);
+  const today = new Date();
+  const todayYYYYMMDD = Utilities.formatDate(today, 'Asia/Tokyo', 'yyyyMMdd');
+  outputAwsLog_(inputLines, today, todayYYYYMMDD);
+}
+/**
+ * Edit the S3 backup list and output to a spreadsheet.
+ * @param {Array.String} Lines of the S3 backup list.
+ * @param {Date} Today's date.
+ * @param {String} Today's date string (yyyyMMdd).
+ * @return none.
+ */
+function outputAwsLog_(inputLines, today, todayYYYYMMDD) {
+  // Only items dated today are eligible.
   // date, time, size, unit, dump name
-  const valueTableSplitBySpace = inputValues.map(x => x[0].split(/\s+/));
+  const valueTableSplitBySpace = inputLines.map(x => x.split(/\s+/));
   const targetValues = valueTableSplitBySpace.filter(x =>
     new RegExp(todayYYYYMMDD).test(x)
   );
@@ -96,6 +183,11 @@ function check2Aws_(
  */
 function outputMsg_(target, msg) {
   const messageString = target.length === 1 ? target : target.join(', ');
+  // Pop-ups cannot be displayed when run by a trigger, so write to the execution log instead.
+  if (isTriggerRun_) {
+    console.log(messageString + msg);
+    return;
+  }
   Browser.msgBox(messageString + msg);
 }
 function getOutputSheetAwsServerNames_(outputSheet) {
