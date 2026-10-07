@@ -3,6 +3,10 @@ const awsSizeIdx = 2;
 const AWS_LOG_FOLDER_ID_KEY = 'AWS_LOG_FOLDER_ID';
 // True when run by a time-driven trigger (no UI available).
 let isTriggerRun_ = false;
+// Background color for cells that could not be imported when run by a trigger.
+const AWS_ERROR_BACKGROUND = '#ff0000';
+// Background color for cells of closed servers on and after the end date.
+const AWS_CLOSED_BACKGROUND = '#cccccc';
 
 function onOpen() {
   SpreadsheetApp.getActiveSpreadsheet().addMenu('ログ出力', [
@@ -57,6 +61,11 @@ function setAwsLog() {
       [todayYYYYMMDD + '.txt'],
       ' がGoogle Driveに見つかりません。wk_awsシートに貼り付けて「AWS（手動貼り付け）」を実行してください'
     );
+    markAllAwsCellsAsError_(today);
+    appendAwsBikouForToday_(
+      today,
+      '【AWS】' + todayYYYYMMDD + '.txt がGoogle Driveに見つかりません'
+    );
     return;
   }
   outputAwsLog_(inputLines, today, todayYYYYMMDD);
@@ -106,6 +115,11 @@ function outputAwsLog_(inputLines, today, todayYYYYMMDD) {
     new RegExp(todayYYYYMMDD).test(x)
   );
   if (targetValues.length === 0) {
+    markAllAwsCellsAsError_(today);
+    appendAwsBikouForToday_(
+      today,
+      '【AWS】' + todayYYYYMMDD + '.txt に今日のバックアップがありません'
+    );
     return;
   }
   const dumpNameIdx = 4;
@@ -129,6 +143,12 @@ function outputAwsLog_(inputLines, today, todayYYYYMMDD) {
   );
   if (check1.length > 0) {
     outputMsg_(check1, 'の出力列を追加して再実行してください');
+    markAllAwsCellsAsError_(today);
+    appendAwsBikou_(
+      outputSheet,
+      outputRow,
+      '【AWS】' + check1.join(', ') + ' の出力列がありません'
+    );
     return;
   }
   const check2 = check2Aws_(
@@ -143,13 +163,156 @@ function outputAwsLog_(inputLines, today, todayYYYYMMDD) {
   outputValueAndCol.forEach(([outputValue, colIdx]) =>
     outputSheet.getRange(outputRow, colIdx + 1).setValue(outputValue)
   );
+  clearAwsErrorBackground_(outputSheet, outputRow, outputValueAndCol);
+  grayOutClosedServers_(outputSheet);
   if (check2 === null) {
     return;
   }
   if (check2.size > 0) {
     const target = Array.from(check2.keys());
     outputMsg_(target, 'のバックアップを確認してください');
+    appendAwsBikou_(
+      outputSheet,
+      outputRow,
+      '【AWS】' + target.join(', ') + ' のバックアップを確認してください'
+    );
+    markAwsCellsAsError_(
+      outputSheet,
+      outputRow,
+      Array.from(check2.values()).map(([, colIdx]) => colIdx)
+    );
   }
+}
+/**
+ * Color the cells that could not be imported. Only when run by a trigger.
+ * @param {Object} The object of the sheet to output.
+ * @param {Number} Row number of the spreadsheet to output.
+ * @param {Array.Number} Indexes of the columns to color, such as 0 for A.
+ * @return none.
+ */
+function markAwsCellsAsError_(outputSheet, outputRow, colIdxList) {
+  if (!isTriggerRun_) {
+    return;
+  }
+  const a1Notations = colIdxList.map(colIdx =>
+    outputSheet.getRange(outputRow, colIdx + 1).getA1Notation()
+  );
+  outputSheet.getRangeList(a1Notations).setBackground(AWS_ERROR_BACKGROUND);
+}
+/**
+ * Gray out the cells of closed servers on and after the end date (column B of wk_closed_servers).
+ * Servers without an end date are not grayed out.
+ * @param {Object} The object of the sheet to output.
+ * @return none.
+ */
+function grayOutClosedServers_(outputSheet) {
+  const closedServers = SpreadsheetApp.getActiveSpreadsheet()
+    .getSheetByName('wk_closed_servers')
+    .getRange('A:B')
+    .getValues()
+    .filter(([name, endDate]) => name !== '' && endDate instanceof Date);
+  if (closedServers.length === 0) {
+    return;
+  }
+  // Date string (yyyy-MM-dd) of each row in column A. null if not a date.
+  const rowDateStrings = outputSheet
+    .getDataRange()
+    .getValues()
+    .map(row =>
+      row[0] instanceof Date
+        ? Utilities.formatDate(row[0], 'Asia/Tokyo', 'yyyy-MM-dd')
+        : null
+    );
+  const a1Notations = closedServers
+    .map(([name, endDate]) => {
+      const colIdx = getColIdx_(outputSheet, 1, name);
+      if (colIdx === undefined) {
+        return [];
+      }
+      const endDateString = Utilities.formatDate(
+        endDate,
+        'Asia/Tokyo',
+        'yyyy-MM-dd'
+      );
+      return rowDateStrings
+        .map((dateString, rowIdx) =>
+          dateString !== null && dateString >= endDateString
+            ? outputSheet.getRange(rowIdx + 1, colIdx + 1).getA1Notation()
+            : null
+        )
+        .filter(x => x !== null);
+    })
+    .flat();
+  if (a1Notations.length === 0) {
+    return;
+  }
+  outputSheet.getRangeList(a1Notations).setBackground(AWS_CLOSED_BACKGROUND);
+}
+/**
+ * Reset the error color of cells where a value has been entered. Other colors are left unchanged.
+ * @param {Object} The object of the sheet to output.
+ * @param {Number} Row number of the spreadsheet to output.
+ * @param {Array} Pairs of [output value, column index].
+ * @return none.
+ */
+function clearAwsErrorBackground_(outputSheet, outputRow, outputValueAndCol) {
+  outputValueAndCol
+    .filter(([outputValue]) => outputValue !== '')
+    .map(([, colIdx]) => outputSheet.getRange(outputRow, colIdx + 1))
+    .filter(range => range.getBackground() === AWS_ERROR_BACKGROUND)
+    .forEach(range => range.setBackground(null));
+}
+/**
+ * Append a message to the remarks column. Only when run by a trigger.
+ * @param {Object} The object of the sheet to output.
+ * @param {Number} Row number of the spreadsheet to output.
+ * @param {String} Message to append.
+ * @return none.
+ */
+function appendAwsBikou_(outputSheet, outputRow, message) {
+  if (!isTriggerRun_) {
+    return;
+  }
+  const bikouCol = getColIdx_(outputSheet, 2, '備考');
+  const bikouRange = outputSheet.getRange(outputRow, bikouCol + 1);
+  const saveBikouValue = bikouRange.getValue();
+  // Do not append the same message twice.
+  if (saveBikouValue.includes(message)) {
+    return;
+  }
+  bikouRange.setValue(
+    saveBikouValue.length > 0 ? saveBikouValue + '\n' + message : message
+  );
+}
+/**
+ * Append a message to the remarks column of today's row. Only when run by a trigger.
+ * @param {Date} Today's date.
+ * @param {String} Message to append.
+ * @return none.
+ */
+function appendAwsBikouForToday_(today, message) {
+  if (!isTriggerRun_) {
+    return;
+  }
+  const outputSheet = getOutputSheet_();
+  const outputRow = getTargetDateIdx_(outputSheet, 0, today) + 1;
+  appendAwsBikou_(outputSheet, outputRow, message);
+}
+/**
+ * Color today's cells of all AWS servers. Only when run by a trigger.
+ * @param {Date} Today's date.
+ * @return none.
+ */
+function markAllAwsCellsAsError_(today) {
+  if (!isTriggerRun_) {
+    return;
+  }
+  const outputSheet = getOutputSheet_();
+  const outputRow = getTargetDateIdx_(outputSheet, 0, today) + 1;
+  const colIdxList = getOutputSheetAwsServerNames_(outputSheet).map(name =>
+    getColIdx_(outputSheet, 1, name)
+  );
+  markAwsCellsAsError_(outputSheet, outputRow, colIdxList);
 }
 function getAwsOutputValues_(values) {
   const colIdxIdx = values[0].length - 1;
